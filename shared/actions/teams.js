@@ -57,7 +57,7 @@ const _joinTeam = function*(action: TeamsGen.JoinTeamPayload) {
   const {teamname} = action.payload
   yield Saga.all([
     Saga.put(TeamsGen.createSetTeamJoinError({error: ''})),
-    Saga.put(TeamsGen.createSetTeamJoinSuccess({success: false, teamname: null})),
+    Saga.put(TeamsGen.createSetTeamJoinSuccess({success: false, teamname: ''})),
   ])
   try {
     const result = yield Saga.call(RPCTypes.teamsTeamAcceptInviteOrRequestAccessRpcPromise, {
@@ -68,7 +68,7 @@ const _joinTeam = function*(action: TeamsGen.JoinTeamPayload) {
     yield Saga.put(
       TeamsGen.createSetTeamJoinSuccess({
         success: true,
-        teamname: result && result.wasTeamName ? teamname : null,
+        teamname: result && result.wasTeamName ? teamname : '',
       })
     )
   } catch (error) {
@@ -1023,14 +1023,6 @@ const _getNewTeams = (state: TypedState): I.Set<string> => state.teams.getIn(['n
 const _getNewTeamRequests = (state: TypedState): I.List<string> =>
   state.teams.getIn(['newTeamRequests'], I.List())
 
-const _setTeamJoinSuccess = (action: TeamsGen.SetTeamJoinSuccessPayload) =>
-  Saga.put(
-    replaceEntity(
-      ['teams'],
-      I.Map({teamJoinSuccess: action.payload.success, teamJoinTeamName: action.payload.teamname})
-    )
-  )
-
 const _setTeamStoreRetentionPolicy = (action: TeamsGen.SetTeamStoreRetentionPolicyPayload) =>
   Saga.put(
     replaceEntity(
@@ -1184,7 +1176,6 @@ const teamsSaga = function*(): Saga.SagaGenerator<any, any> {
   yield Saga.safeTakeEveryPure(TeamsGen.deleteChannelConfirmed, _deleteChannelConfirmed)
   yield Saga.safeTakeEveryPure(TeamsGen.badgeAppForTeams, _badgeAppForTeams)
   yield Saga.safeTakeEveryPure(RouteConstants.switchTo, _onTabChange)
-  yield Saga.safeTakeEveryPure(TeamsGen.setTeamJoinSuccess, _setTeamJoinSuccess)
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamStoreRetentionPolicy, _setTeamStoreRetentionPolicy)
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamLoadingInvites, _setTeamLoadingInvites)
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamRequests, _setTeamRequests)
