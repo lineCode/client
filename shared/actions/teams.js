@@ -121,7 +121,7 @@ const _getTeamRetentionPolicy = function*(action: TeamsGen.GetTeamRetentionPolic
     throw err
   } finally {
     yield Saga.sequentially([
-      Saga.put(replaceEntity(['teams', 'teamNameToRetentionPolicy'], I.Map([[teamname, retentionPolicy]]))),
+      Saga.put(TeamsGen.createSetTeamStoreRetentionPolicy({teamname, retentionPolicy})),
       Saga.put(createDecrementWaiting({key: Constants.teamWaitingKey(teamname)})),
     ])
   }
@@ -863,7 +863,7 @@ function _setupTeamHandlers() {
       const conv = convs[0]
       const teamname = conv.name
       const newPolicy = Constants.serviceRetentionPolicyToRetentionPolicy(conv.teamRetention)
-      dispatch(replaceEntity(['teams', 'teamNameToRetentionPolicy'], I.Map([[teamname, newPolicy]])))
+      dispatch(TeamsGen.createSetTeamStoreRetentionPolicy({teamname, retentionPolicy: newPolicy}))
     })
   })
 }
@@ -1043,6 +1043,14 @@ const _setTeamJoinSuccess = (action: TeamsGen.SetTeamJoinSuccessPayload) =>
     )
   )
 
+const _setTeamStoreRetentionPolicy = (action: TeamsGen.SetTeamStoreRetentionPolicyPayload) =>
+  Saga.put(
+    replaceEntity(
+      ['teams', 'teamNameToRetentionPolicy'],
+      I.Map([[action.payload.teamname, action.payload.retentionPolicy]])
+    )
+  )
+
 const teamsSaga = function*(): Saga.SagaGenerator<any, any> {
   yield Saga.safeTakeEveryPure(TeamsGen.leaveTeam, _leaveTeam)
   yield Saga.safeTakeEveryPure(TeamsGen.createNewTeam, _createNewTeam)
@@ -1074,6 +1082,7 @@ const teamsSaga = function*(): Saga.SagaGenerator<any, any> {
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamCreationPending, _setTeamCreationPending)
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamJoinError, _setTeamJoinError)
   yield Saga.safeTakeEveryPure(TeamsGen.setTeamJoinSuccess, _setTeamJoinSuccess)
+  yield Saga.safeTakeEveryPure(TeamsGen.setTeamStoreRetentionPolicy, _setTeamStoreRetentionPolicy)
   yield Saga.safeTakeEvery(TeamsGen.inviteToTeamByPhone, _inviteToTeamByPhone)
   yield Saga.safeTakeEveryPure(TeamsGen.setPublicity, _setPublicity, _afterSaveCalls)
   yield Saga.safeTakeEveryPure(
