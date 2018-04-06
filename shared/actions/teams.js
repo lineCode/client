@@ -727,13 +727,7 @@ const _setPublicity = function(action: TeamsGen.SetPublicityPayload, state: Type
     })
   )
 
-  const teamPublicitySettings = state.teams.getIn(['teamNameToPublicitySettings', teamname], {
-    anyMemberShowcase: false,
-    description: '',
-    ignoreAccessRequests: false,
-    member: false,
-    team: false,
-  })
+  const teamPublicitySettings = Constants.getTeamPublicitySettings(state, teamname)
 
   const ignoreAccessRequests = teamPublicitySettings.ignoreAccessRequests
   const openTeam = teamSettings.open
