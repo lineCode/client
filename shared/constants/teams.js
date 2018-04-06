@@ -179,6 +179,9 @@ const getTeamID = (state: TypedState, teamname: Types.Teamname): string =>
 const getTeamRetentionPolicy = (state: TypedState, teamname: Types.Teamname): ?Types.RetentionPolicy =>
   state.teams.getIn(['teamNameToRetentionPolicy', teamname], null)
 
+const getTeamMembers = (state: TypedState, teamname: Types.Teamname): I.Map<string, Types.MemberInfo> =>
+  state.teams.getIn(['teamNameToMembers', teamname], I.Map())
+
 const isAdmin = (type: ?Types.TeamRoleType) => type === 'admin'
 const isOwner = (type: ?Types.TeamRoleType) => type === 'owner'
 
@@ -265,6 +268,7 @@ export {
   getChannelNameFromConvID,
   getTeamID,
   getTeamRetentionPolicy,
+  getTeamMembers,
   getTopicFromConvID,
   isAdmin,
   isOwner,
