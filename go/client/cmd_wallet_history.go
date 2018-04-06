@@ -103,6 +103,14 @@ func (c *cmdWalletHistory) Run() (err error) {
 			line("From: %v", p.FromStellar.String())
 			line("To  : %v", p.ToStellar.String())
 		}
+		if len(p.Note) > 0 {
+			// @@@ TODO sanitize this note so it can't be used to be tricky
+			line("Note: %v", p.Note)
+		}
+		if len(p.NoteErr) > 0 {
+			// @@@ TODO sanitize this note so it can't be used to be tricky
+			line("Note Error: %v", p.NoteErr)
+		}
 		if c.verbose {
 			line("Transaction Hash: %v", p.StellarTxID)
 		}

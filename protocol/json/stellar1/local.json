@@ -88,6 +88,14 @@
             "string"
           ],
           "name": "toUsername"
+        },
+        {
+          "type": "string",
+          "name": "note"
+        },
+        {
+          "type": "string",
+          "name": "noteErr"
         }
       ]
     }

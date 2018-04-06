@@ -25,6 +25,11 @@ func SetClient(c *horizon.Client, n build.Network) {
 	network = n
 }
 
+// Client returns the horizon client.
+func Client() *horizon.Client {
+	return client
+}
+
 // Account represents a Stellar account.
 type Account struct {
 	address  AddressStr
@@ -77,7 +82,7 @@ func AccountSeqno(address AddressStr) (uint64, error) {
 }
 
 // RecentPayments returns the account's recent payments.
-// This is a summary of any recent payment transactions (payment or create_account).
+// This is a summary of any recent payment transactions (payment, create_account, or account_merge).
 // It does not contain as much information as RecentTransactions.
 // It is faster as it is only one request to horizon.
 func (a *Account) RecentPayments() ([]horizon.Payment, error) {
@@ -193,7 +198,7 @@ func (a *Account) SendXLM(from SeedStr, to AddressStr, amount string) (ledger in
 
 // paymentXLM creates a payment transaction from 'from' to 'to' for 'amount' lumens.
 func (a *Account) paymentXLM(from SeedStr, to AddressStr, amount string) (ledger int32, txid string, err error) {
-	_, signed, err := a.PaymentXLMTransaction(from, to, amount, client)
+	_, signed, _, err := a.PaymentXLMTransaction(from, to, amount, client)
 	if err != nil {
 		return 0, "", err
 	}
@@ -202,7 +207,8 @@ func (a *Account) paymentXLM(from SeedStr, to AddressStr, amount string) (ledger
 }
 
 // PaymentXLMTransaction creates a signed transaction to send a payment from 'from' to 'to' for 'amount' lumens.
-func (a *Account) PaymentXLMTransaction(from SeedStr, to AddressStr, amount string, seqnoProvider build.SequenceProvider) (seqno uint64, signed string, err error) {
+func (a *Account) PaymentXLMTransaction(from SeedStr, to AddressStr, amount string,
+	seqnoProvider build.SequenceProvider) (seqno uint64, signed, txHashHex string, err error) {
 	tx, err := build.Transaction(
 		build.SourceAccount{AddressOrSeed: from.SecureNoLogString()},
 		network,
@@ -214,7 +220,7 @@ func (a *Account) PaymentXLMTransaction(from SeedStr, to AddressStr, amount stri
 		build.MemoText{Value: "via keybase"},
 	)
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
 
 	return a.sign(from, tx)
@@ -222,7 +228,7 @@ func (a *Account) PaymentXLMTransaction(from SeedStr, to AddressStr, amount stri
 
 // createAccountXLM funds an new account 'to' from 'from' with a starting balance of 'amount'.
 func (a *Account) createAccountXLM(from SeedStr, to AddressStr, amount string) (ledger int32, txid string, err error) {
-	_, signed, err := a.CreateAccountXLMTransaction(from, to, amount, client)
+	_, signed, _, err := a.CreateAccountXLMTransaction(from, to, amount, client)
 	if err != nil {
 		return 0, "", err
 	}
@@ -232,7 +238,8 @@ func (a *Account) createAccountXLM(from SeedStr, to AddressStr, amount string) (
 
 // CreateAccountXLMTransaction creates a signed transaction to fund an new account 'to' from 'from'
 // with a starting balance of 'amount'.
-func (a *Account) CreateAccountXLMTransaction(from SeedStr, to AddressStr, amount string, seqnoProvider build.SequenceProvider) (seqno uint64, signed string, err error) {
+func (a *Account) CreateAccountXLMTransaction(from SeedStr, to AddressStr, amount string,
+	seqnoProvider build.SequenceProvider) (seqno uint64, signed string, txHashHex string, err error) {
 	tx, err := build.Transaction(
 		build.SourceAccount{AddressOrSeed: from.SecureNoLogString()},
 		network,
@@ -244,22 +251,26 @@ func (a *Account) CreateAccountXLMTransaction(from SeedStr, to AddressStr, amoun
 		build.MemoText{Value: "via keybase"},
 	)
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
 
 	return a.sign(from, tx)
 }
 
 // sign signs and base64-encodes a transaction.
-func (a *Account) sign(from SeedStr, tx *build.TransactionBuilder) (seqno uint64, signed string, err error) {
+func (a *Account) sign(from SeedStr, tx *build.TransactionBuilder) (seqno uint64, signed, txHashHex string, err error) {
 	txe, err := tx.Sign(from.SecureNoLogString())
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
 
 	seqno = uint64(txe.E.Tx.SeqNum)
 	signed, err = txe.Base64()
-	return seqno, signed, err
+	if err != nil {
+		return 0, "", "", err
+	}
+	txHashHex, err = tx.HashHex()
+	return seqno, signed, txHashHex, err
 }
 
 // Submit submits a signed transaction to horizon.

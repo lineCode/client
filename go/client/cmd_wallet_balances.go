@@ -59,7 +59,7 @@ func (c *cmdWalletBalances) Run() error {
 	for _, localBalance := range balances {
 		asset := localBalance.Balance.Asset
 		kind := asset.Type
-		if asset.Type == "native" {
+		if asset.IsNativeXLM() {
 			kind = "XLM"
 		}
 		localValue := ""

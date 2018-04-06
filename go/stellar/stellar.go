@@ -113,7 +113,7 @@ func BalanceXLM(ctx context.Context, g *libkb.GlobalContext, accountID stellar1.
 	}
 
 	for _, b := range balances {
-		if b.Asset.Type == "native" {
+		if b.Asset.IsNativeXLM() {
 			return b, nil
 		}
 	}
@@ -197,7 +197,7 @@ func LookupRecipient(ctx context.Context, g *libkb.GlobalContext, to RecipientIn
 	return &r, nil
 }
 
-func postFromCurrentUser(ctx context.Context, g *libkb.GlobalContext, acctID stellarnet.AddressStr, recipient *Recipient) stellar1.PaymentPost {
+func makePostFromCurrentUser(ctx context.Context, g *libkb.GlobalContext, acctID stellarnet.AddressStr, recipient *Recipient) stellar1.PaymentPost {
 	uid, deviceID, _, _, _ := g.ActiveDevice.AllFields()
 	post := stellar1.PaymentPost{
 		Members: stellar1.Members{
@@ -219,7 +219,9 @@ func postFromCurrentUser(ctx context.Context, g *libkb.GlobalContext, acctID ste
 	return post
 }
 
-func SendPayment(ctx context.Context, g *libkb.GlobalContext, to RecipientInput, amount string) (stellar1.PaymentResult, error) {
+// SendPayment sends XLM
+// `note` is optional. An empty string will not attach a note.
+func SendPayment(ctx context.Context, g *libkb.GlobalContext, to RecipientInput, amount string, note string) (stellar1.PaymentResult, error) {
 	// look up sender wallet
 	primary, err := LookupSenderPrimary(ctx, g)
 	if err != nil {
@@ -241,25 +243,38 @@ func SendPayment(ctx context.Context, g *libkb.GlobalContext, to RecipientInput,
 		return stellar1.PaymentResult{}, err
 	}
 
-	post := postFromCurrentUser(ctx, g, primaryAccountID, recipient)
+	post := makePostFromCurrentUser(ctx, g, primaryAccountID, recipient)
 
 	sp := NewSeqnoProvider(ctx, g)
 
 	// check if recipient account exists
+	var txID string
 	_, err = BalanceXLM(ctx, g, stellar1.AccountID(recipient.AccountID.String()))
 	if err != nil {
 		// if no balance, create_account operation
 		// we could check here to make sure that amount is at least 1XLM
 		// but for now, just let stellar-core tell us there was an error
-		post.StellarAccountSeqno, post.SignedTransaction, err = senderAcct.CreateAccountXLMTransaction(primarySeed, recipient.AccountID, amount, sp)
+		post.StellarAccountSeqno, post.SignedTransaction, txID, err = senderAcct.CreateAccountXLMTransaction(primarySeed, recipient.AccountID, amount, sp)
 		if err != nil {
 			return stellar1.PaymentResult{}, err
 		}
 	} else {
 		// if balance, payment operation
-		post.StellarAccountSeqno, post.SignedTransaction, err = senderAcct.PaymentXLMTransaction(primarySeed, recipient.AccountID, amount, sp)
+		post.StellarAccountSeqno, post.SignedTransaction, txID, err = senderAcct.PaymentXLMTransaction(primarySeed, recipient.AccountID, amount, sp)
 		if err != nil {
 			return stellar1.PaymentResult{}, err
+		}
+	}
+
+	if len(note) > 0 {
+		noteClear := stellar1.NoteContents{
+			Version:   1,
+			Note:      note,
+			StellarID: stellar1.TransactionID(txID),
+		}
+		post.NoteB64, err = noteEncryptB64(ctx, g, noteClear, recipient.User)
+		if err != nil {
+			return stellar1.PaymentResult{}, fmt.Errorf("error encrypting note: %v", err)
 		}
 	}
 
@@ -279,4 +294,77 @@ func GetOwnPrimaryAccountID(ctx context.Context, g *libkb.GlobalContext) (res st
 		return res, err
 	}
 	return primary.AccountID, nil
+}
+
+func RecentPaymentsCLILocal(ctx context.Context, g *libkb.GlobalContext, accountID stellar1.AccountID) (res []stellar1.RecentPaymentCLILocal, err error) {
+	defer g.CTraceTimed(ctx, "Stellar.RecentPaymentsCLILocal", func() error { return err })()
+	payments, err := remote.RecentPayments(ctx, g, accountID, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, x := range payments {
+		y := stellar1.RecentPaymentCLILocal{
+			StellarTxID: x.StellarTxID,
+			Status:      "pending",
+			Amount:      x.Amount,
+			Asset:       x.Asset,
+			FromStellar: x.From,
+			ToStellar:   x.To,
+		}
+		if x.Stellar != nil {
+			y.Status = "completed"
+		}
+		if x.Keybase != nil {
+			y.Time = x.Keybase.Ctime
+			switch x.Keybase.Status {
+			case stellar1.TransactionStatus_PENDING:
+				y.Status = "pending"
+			case stellar1.TransactionStatus_SUCCESS:
+				y.Status = "completed"
+			case stellar1.TransactionStatus_ERROR_TRANSIENT:
+				y.Status = "error"
+				y.StatusDetail = x.Keybase.SubmitErrMsg
+			case stellar1.TransactionStatus_ERROR_PERMANENT:
+				y.Status = "error"
+				y.StatusDetail = x.Keybase.SubmitErrMsg
+			default:
+				y.Status = "unknown"
+				y.StatusDetail = x.Keybase.SubmitErrMsg
+			}
+			y.DisplayAmount = x.Keybase.DisplayAmount
+			y.DisplayCurrency = x.Keybase.DisplayCurrency
+			fromUsername, err := g.GetUPAKLoader().LookupUsername(ctx, x.Keybase.FromUID)
+			if err == nil {
+				tmp := fromUsername.String()
+				y.FromUsername = &tmp
+			}
+			if x.Keybase.ToUID != nil {
+				toUsername, err := g.GetUPAKLoader().LookupUsername(ctx, *x.Keybase.ToUID)
+				if err == nil {
+					tmp := toUsername.String()
+					y.ToUsername = &tmp
+				}
+			}
+			if len(x.Keybase.NoteB64) > 0 {
+				note, err := noteDecryptB64(ctx, g, x.Keybase.NoteB64)
+				if err != nil {
+					y.NoteErr = fmt.Sprintf("failed to decrypt payment note: %v", err)
+				} else {
+					if note.StellarID != x.StellarTxID {
+						y.NoteErr = "discarded note for wrong txid"
+					} else {
+						y.Note = note.Note
+					}
+				}
+				if len(y.NoteErr) > 0 {
+					g.Log.CWarningf(ctx, y.NoteErr)
+				}
+			}
+		}
+		if x.Stellar != nil {
+			y.Time = x.Stellar.Ctime
+		}
+		res = append(res, y)
+	}
+	return res, nil
 }
