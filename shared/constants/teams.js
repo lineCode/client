@@ -212,6 +212,9 @@ const getTeamInvites = (state: TypedState, teamname: Types.Teamname): I.Set<Type
 const isInTeam = (state: TypedState, teamname: Types.Teamname): boolean =>
   state.teams.hasIn(['teamnames', teamname])
 
+const isAccessRequestPending = (state: TypedState, teamname: Types.Teamname): boolean =>
+  state.teams.hasIn(['teamNameAccessRequestsPending', teamname])
+
 const isAdmin = (type: ?Types.TeamRoleType) => type === 'admin'
 const isOwner = (type: ?Types.TeamRoleType) => type === 'owner'
 
@@ -302,6 +305,7 @@ export {
   getTeamPublicitySettings,
   getTeamInvites,
   isInTeam,
+  isAccessRequestPending,
   getTopicFromConvID,
   isAdmin,
   isOwner,
