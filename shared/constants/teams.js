@@ -206,6 +206,9 @@ const getTeamPublicitySettings = (state: TypedState, teamname: Types.Teamname): 
     team: false,
   })
 
+const getTeamInvites = (state: TypedState, teamname: Types.Teamname): I.Set<Types.InviteInfo> =>
+  state.teams.getIn(['teamNameToInvites', teamname], I.Set())
+
 const isAdmin = (type: ?Types.TeamRoleType) => type === 'admin'
 const isOwner = (type: ?Types.TeamRoleType) => type === 'owner'
 
@@ -294,6 +297,7 @@ export {
   getTeamRetentionPolicy,
   getTeamMembers,
   getTeamPublicitySettings,
+  getTeamInvites,
   getTopicFromConvID,
   isAdmin,
   isOwner,
